@@ -15,10 +15,14 @@ def read_serial_data(serial_connection):
         except ValueError:
             print(f"Invalid data: {line}")
             return None
-          
-          
 
-def main(com_port):
+def apply_calibration(raw_value, slope, intercept):
+    """
+    Applies calibration to the raw value to compute the expected value.
+    """
+    return (raw_value - intercept) / slope
+
+def main(com_port, slope=1.2961, intercept=0.1312):
     """
     Main function to read serial data and write to a CSV file.
     """
@@ -27,41 +31,38 @@ def main(com_port):
 
     # Generate a unique file name with the current timestamp
     csv_filename = 'data_log_' + datetime.datetime.now().strftime('%Y-%m-%d-%I%M%S%p') + '.csv'
-    value = ''
 
     # Write header to the CSV file
     with open(csv_filename, 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['Timestamp', 'Value'])
+        writer.writerow(['Timestamp', 'Expected Value'])
         
     data_buffer = []  # Buffer to store data points
 
     try:
         while True:
-            value = read_serial_data(ser)
-            x = (value - 0.1312)/1.2961
+            raw_value = read_serial_data(ser)
 
-            if value is not None:
+            if raw_value is not None:
+                expected_value = apply_calibration(raw_value, slope, intercept)
                 timestamp = datetime.datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')
-                data_buffer.append([timestamp, value])  # Add data to buffer
+                data_buffer.append([timestamp, expected_value])  # Add data to buffer
 
                 if len(data_buffer) >= 10:
-                  # Open the file in append mode and write the data
-                  with open(csv_filename, 'a', newline='') as file:
-                      writer = csv.writer(file)
-                      # write single rows instead of writerows to force CR/LF on each line
-                      for data_point in data_buffer:
-                          writer.writerow(data_point)            
-                      file.flush() 
-                  data_buffer.clear()
+                    # Open the file in append mode and write the data
+                    with open(csv_filename, 'a', newline='') as file:
+                        writer = csv.writer(file)
+                        for data_point in data_buffer:
+                            writer.writerow(data_point)            
+                        file.flush() 
+                    data_buffer.clear()
 
             time.sleep(0.1)  # Delay between readings in milliseconds (100 ms)
 
     except KeyboardInterrupt:
-        # write whats left in the buffer
+        # Write what's left in the buffer
         with open(csv_filename, 'a', newline='') as file:
             writer = csv.writer(file)
-            #writer.writerow([timestamp, value])
             for data_point in data_buffer:
                 writer.writerow(data_point)            
             file.flush()      
@@ -70,8 +71,10 @@ def main(com_port):
         ser.close()
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python3 serial_data_logger.py COM_PORT")
+    if len(sys.argv) < 2:
+        print("Usage: python3 serial_data_logger.py COM_PORT [slope] [intercept]")
     else:
         com_port = sys.argv[1]
-        main(com_port)
+        slope = float(sys.argv[2]) if len(sys.argv) > 2 else 1.2961
+        intercept = float(sys.argv[3]) if len(sys.argv) > 3 else 0.1312
+        main(com_port, slope, intercept)
